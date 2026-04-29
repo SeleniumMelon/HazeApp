@@ -1,0 +1,14 @@
+{
+  "name": "hazeapp",
+  "version": "1.0.0",
+  "description": "手机端雾霾天气探测系统（H5 Web App + Node.js/Express 后端）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "express": "^4.18.4",
+    "node-fetch": "^2.6.7"
+  }
+}
