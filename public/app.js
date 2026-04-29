@@ -183,6 +183,11 @@ function renderWeather(data) {
   adviceText.textContent = air.advice || '暂无出行建议';
   latestForecast = weather.forecast || [];
   drawChart(latestForecast);
+  const airColor = air.color || '#000000';
+  aqiValue.style.color = airColor;
+  aqiLevel.style.color = airColor;
+  pm25Value.style.color = airColor;
+  pm10Value.style.color = airColor;
 }
 
 function toNumber(value) {

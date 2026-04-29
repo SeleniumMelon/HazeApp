@@ -27,12 +27,12 @@ function writeDb(data) {
 }
 
 function aqiLevel(aqi) {
-  if (aqi <= 50) return { level: '优', color: '#37b24d' };
-  if (aqi <= 100) return { level: '良', color: '#74b816' };
-  if (aqi <= 150) return { level: '轻度污染', color: '#f59f00' };
-  if (aqi <= 200) return { level: '中度污染', color: '#f76707' };
-  if (aqi <= 300) return { level: '重度污染', color: '#d6336c' };
-  return { level: '严重污染', color: '#842029' };
+  if (aqi <= 50) return { level: '优', color: '#50e36b' };
+  if (aqi <= 100) return { level: '良', color: '#81cf14' };
+  if (aqi <= 150) return { level: '轻度污染', color: '#cd9d45' };
+  if (aqi <= 200) return { level: '中度污染', color: '#e07128' };
+  if (aqi <= 300) return { level: '重度污染', color: '#ac310e' };
+  return { level: '严重污染', color: '#7f0a14' };
 }
 
 function mockData(city) {
@@ -60,6 +60,7 @@ function mockData(city) {
       pm10,
       aqi,
       level: aqiInfo.level,
+      color: aqiInfo.color,
       advice: ''
     }
   };
@@ -351,6 +352,7 @@ async function fetchQWeatherData(city) {
         pm10,
         aqi,
         level: aqiInfo.level,
+        color: aqiInfo.color,
         advice: airAdvice(aqi)
       }
     };
