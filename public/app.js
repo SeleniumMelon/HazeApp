@@ -19,6 +19,8 @@ const cityInput = document.getElementById('city-input');
 const chartCanvas = document.getElementById('trend-chart');
 
 let currentCity = '';
+let latestForecast = [];
+let chartResizeTimer = null;
 
 function setDate() {
   const now = new Date();
@@ -33,6 +35,10 @@ function setDate() {
 async function init() {
   setDate();
   refreshButton.addEventListener('click', () => refreshWeather());
+  window.addEventListener('resize', () => {
+    clearTimeout(chartResizeTimer);
+    chartResizeTimer = setTimeout(() => drawChart(latestForecast), 120);
+  });
   cityForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const city = cityInput.value.trim();
@@ -174,101 +180,203 @@ function renderWeather(data) {
   pm25Value.textContent = air.pm25 ?? '--';
   pm10Value.textContent = air.pm10 ?? '--';
   aqiLevel.textContent = air.level || '--';
-  adviceText.textContent = air.advice || getAdviceByAqi(air.aqi);
-  drawChart(weather.forecast || []);
+  adviceText.textContent = air.advice || '暂无出行建议';
+  latestForecast = weather.forecast || [];
+  drawChart(latestForecast);
 }
 
-function getAdviceByAqi(aqi) {
-  if (aqi <= 50) return '空气质量优，适宜外出活动。';
-  if (aqi <= 100) return '空气质量良，适宜正常出行。';
-  if (aqi <= 150) return '轻度污染，敏感人群应减少户外活动。';
-  if (aqi <= 200) return '中度污染，建议佩戴口罩并减少外出。';
-  if (aqi <= 300) return '重度污染，尽量待在室内，关闭门窗。';
-  return '严重污染，建议尽量避免外出。';
+function toNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function getCanvasMetrics(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  const cssWidth = Math.round(rect.width || canvas.width || 360);
+  const cssHeight = Math.round(rect.height || canvas.height || 180);
+
+  if (canvas.width !== Math.round(cssWidth * pixelRatio) || canvas.height !== Math.round(cssHeight * pixelRatio)) {
+    canvas.width = Math.round(cssWidth * pixelRatio);
+    canvas.height = Math.round(cssHeight * pixelRatio);
+  }
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+  return { ctx, width: cssWidth, height: cssHeight };
+}
+
+function getSoftRange(values, { marginRatio = 0.18, minMargin = 1, clampMin = null, clampMax = null } = {}) {
+  const validValues = values.filter(Number.isFinite);
+  if (validValues.length === 0) {
+    return { min: 0, max: 1 };
+  }
+
+  let min = Math.min(...validValues);
+  let max = Math.max(...validValues);
+
+  if (min === max) {
+    min -= minMargin;
+    max += minMargin;
+  } else {
+    const margin = Math.max((max - min) * marginRatio, minMargin);
+    min -= margin;
+    max += margin;
+  }
+
+  if (clampMin !== null) min = Math.max(clampMin, min);
+  if (clampMax !== null) max = Math.min(clampMax, max);
+  if (max <= min) max = min + 1;
+
+  return { min, max };
+}
+
+function createSmoothPath(ctx, coords) {
+  if (coords.length === 0) return;
+  ctx.moveTo(coords[0].x, coords[0].y);
+
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const p0 = coords[i - 1] || coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] || p2;
+
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
+}
+
+function drawSeries(ctx, coords, color, fillColor, baseY) {
+  if (coords.length === 0) return;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  ctx.beginPath();
+  createSmoothPath(ctx, coords);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.8;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 8;
+  ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawChart(points) {
-  const ctx = chartCanvas.getContext('2d');
-  const width = chartCanvas.width;
-  const height = chartCanvas.height;
+  const { ctx, width, height } = getCanvasMetrics(chartCanvas);
   ctx.clearRect(0, 0, width, height);
 
-  if (!points || points.length === 0) {
+  const cleanPoints = (points || [])
+    .slice(0, 24)
+    .map((item) => ({
+      hour: item.hour || '',
+      temp: toNumber(item.temp),
+      humidity: toNumber(item.humidity)
+    }))
+    .filter((item) => item.temp !== null && item.humidity !== null);
+
+  if (cleanPoints.length === 0) {
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '16px sans-serif';
-    ctx.fillText('暂无趋势数据', 20, 110);
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('暂无趋势数据', width / 2, height / 2 + 5);
     return;
   }
 
-  const padding = 32;
-  const plotWidth = width - padding * 2;
-  const plotHeight = height - padding * 2;
-  const temps = points.map((item) => item.temp);
-  const hums = points.map((item) => item.humidity);
-  const maxTemp = Math.max(...temps, 30);
-  const minTemp = Math.min(...temps, 0);
-  const maxHum = Math.max(...hums, 100);
-  const minHum = Math.min(...hums, 0);
-  const yTempScale = plotHeight / Math.max(1, maxTemp - minTemp);
-  const yHumScale = plotHeight / Math.max(1, maxHum - minHum);
+  const padding = { top: 30, right: 36, bottom: 34, left: 36 };
+  const plotLeft = padding.left;
+  const plotRight = width - padding.right;
+  const plotTop = padding.top;
+  const plotBottom = height - padding.bottom;
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
 
-  ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)';
+  const temps = cleanPoints.map((item) => item.temp);
+  const humidities = cleanPoints.map((item) => item.humidity);
+  const tempRange = getSoftRange(temps, { marginRatio: 0.22, minMargin: 2 });
+  const humidityRange = getSoftRange(humidities, {
+    marginRatio: 0.16,
+    minMargin: 6,
+    clampMin: 0,
+    clampMax: 100
+  });
+
+  const xOf = (index) => plotLeft + (plotWidth * index) / Math.max(1, cleanPoints.length - 1);
+  const yOfTemp = (value) => plotBottom - ((value - tempRange.min) / (tempRange.max - tempRange.min)) * plotHeight;
+  const yOfHumidity = (value) => plotBottom - ((value - humidityRange.min) / (humidityRange.max - humidityRange.min)) * plotHeight;
+
+  ctx.save();
   ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '10.5px sans-serif';
+
   for (let i = 0; i <= 4; i += 1) {
-    const y = padding + (plotHeight / 4) * i;
+    const y = plotTop + (plotHeight / 4) * i;
     ctx.beginPath();
-    ctx.moveTo(padding, y);
-    ctx.lineTo(width - padding, y);
+    ctx.moveTo(plotLeft, y);
+    ctx.lineTo(plotRight, y);
     ctx.stroke();
+
+    const tempLabel = Math.round(tempRange.max - ((tempRange.max - tempRange.min) / 4) * i);
+    const humidityLabel = Math.round(humidityRange.max - ((humidityRange.max - humidityRange.min) / 4) * i);
+
+    ctx.textAlign = 'right';
+    ctx.fillText(`${tempLabel}°`, plotLeft - 7, y + 4);
+    ctx.textAlign = 'left';
+    ctx.fillText(`${humidityLabel}%`, plotRight + 7, y + 4);
   }
 
-  const step = plotWidth / Math.max(1, points.length - 1);
-  ctx.lineWidth = 3;
-
-  ctx.strokeStyle = '#38bdf8';
+  ctx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
   ctx.beginPath();
-  points.forEach((item, index) => {
-    const x = padding + index * step;
-    const y = padding + plotHeight - (item.temp - minTemp) * yTempScale;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-    ctx.fillStyle = '#38bdf8';
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  });
+  ctx.moveTo(plotLeft, plotBottom);
+  ctx.lineTo(plotRight, plotBottom);
   ctx.stroke();
 
-  ctx.strokeStyle = '#f97316';
-  ctx.beginPath();
-  points.forEach((item, index) => {
-    const x = padding + index * step;
-    const y = padding + plotHeight - (item.humidity - minHum) * yHumScale;
-    if (index === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-    ctx.fillStyle = '#f97316';
-    ctx.beginPath();
-    ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x, y);
+  ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  const labelStep = Math.max(1, Math.ceil(cleanPoints.length / 5));
+  cleanPoints.forEach((item, index) => {
+    if (index % labelStep !== 0 && index !== cleanPoints.length - 1) return;
+    ctx.fillText(item.hour, xOf(index), height - 12);
   });
-  ctx.stroke();
+  ctx.restore();
 
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = '12px sans-serif';
-  points.forEach((item, index) => {
-    const x = padding + index * step;
-    ctx.fillText(item.hour, x - 18, height - 10);
-  });
+  const tempCoords = cleanPoints.map((item, index) => ({ x: xOf(index), y: yOfTemp(item.temp) }));
+  const humidityCoords = cleanPoints.map((item, index) => ({ x: xOf(index), y: yOfHumidity(item.humidity) }));
 
-  ctx.fillStyle = '#38bdf8';
-  ctx.font = '12px sans-serif';
-  ctx.fillText('温度', padding, padding - 12);
+  const tempGradient = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
+  tempGradient.addColorStop(0, 'rgba(14, 165, 233, 0.22)');
+  tempGradient.addColorStop(1, 'rgba(14, 165, 233, 0.02)');
+
+  const humidityGradient = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
+  humidityGradient.addColorStop(0, 'rgba(249, 115, 22, 0.18)');
+  humidityGradient.addColorStop(1, 'rgba(249, 115, 22, 0.02)');
+
+  drawSeries(ctx, tempCoords, '#f97316', tempGradient, plotBottom);
+  drawSeries(ctx, humidityCoords, '#0ea5e9', humidityGradient, plotBottom);
+
+  ctx.save();
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
   ctx.fillStyle = '#f97316';
-  ctx.fillText('湿度', padding + 68, padding - 12);
+  ctx.beginPath();
+  ctx.roundRect(plotLeft, 10, 9, 9, 3);
+  ctx.fill();
+  ctx.fillText('温度 ℃', plotLeft + 14, 18);
+  
+  ctx.fillStyle = '#0ea5e9';
+  ctx.beginPath();
+  ctx.roundRect(plotLeft + 74, 10, 9, 9, 3);
+  ctx.fill();
+  ctx.fillText('湿度 %', plotLeft + 88, 18);
+  ctx.restore();
 }
 
 init();

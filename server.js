@@ -35,19 +35,6 @@ function aqiLevel(aqi) {
   return { level: '严重污染', color: '#842029' };
 }
 
-function createHourlyForecast(temp, humidity) {
-  const result = [];
-  for (let i = 0; i < 7; i += 1) {
-    const hour = `${(8 + i).toString().padStart(2, '0')}:00`;
-    result.push({
-      hour,
-      temp: Math.round(temp + (Math.sin(i / 2) * 3)),
-      humidity: Math.min(100, Math.max(15, humidity + (Math.cos(i / 3) * 8)))
-    });
-  }
-  return result;
-}
-
 function mockData(city) {
   const baseTemp = 15 + Math.floor(Math.random() * 10);
   const baseHumidity = 45 + Math.floor(Math.random() * 30);
@@ -66,7 +53,7 @@ function mockData(city) {
       feels_like: baseTemp + (Math.random() > 0.5 ? -1 : 1),
       sunrise: '06:12',
       sunset: '18:35',
-      forecast: createHourlyForecast(baseTemp, baseHumidity)
+      forecast: []
     },
     air: {
       pm25,
@@ -79,65 +66,12 @@ function mockData(city) {
 }
 
 function airAdvice(aqi) {
-  if (aqi <= 50) return '空气质量优，适宜外出。';
-  if (aqi <= 100) return '空气质量良，敏感人群应适当注意。';
-  if (aqi <= 150) return '轻度污染，建议减少户外剧烈运动。';
-  if (aqi <= 200) return '中度污染，建议佩戴口罩并减少外出。';
-  if (aqi <= 300) return '重度污染，尽量待在室内，关闭门窗。';
-  return '严重污染，建议尽量避免外出。';
-}
-
-async function fetchBaiduWeather(city) {
-  const apiKey = process.env.WEATHER_API_KEY;
-  const url = `http://api.map.baidu.com/telematics/v3/weather?location=${encodeURIComponent(city)}&output=json&ak=${apiKey}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    const body = await res.text();
-    return { error: `Baidu 天气 API 请求失败：${res.status} ${body}` };
-  }
-
-  const json = await res.json();
-  if (json.status !== 'success') {
-    return { error: `Baidu 天气 API 错误：${json.status} ${json.message || ''}` };
-  }
-
-  const result = json.results?.[0];
-  if (!result) {
-    return { error: 'Baidu 天气 API 返回数据格式异常' };
-  }
-
-  const weatherData = result.weather_data?.[0] || {};
-  const pm25 = Number(result.pm25 || 0);
-  const pm10 = pm25 ? Math.max(0, Math.round(pm25 * 1.3)) : 0;
-  const aqi = pm25 ? Math.min(300, Math.max(0, Math.round((pm25 + pm10) / 2))) : 0;
-  const aqiInfo = aqiLevel(aqi);
-  const tempMatch = weatherData.temperature?.match(/-?\d+/);
-  const temperature = tempMatch ? Number(tempMatch[0]) : 0;
-
-  return {
-    weather: {
-      city: result.currentCity || city,
-      condition: weatherData.weather || weatherData.wind || '晴',
-      temperature,
-      humidity: 0,
-      wind: weatherData.wind || '--',
-      feels_like: temperature,
-      sunrise: '--',
-      sunset: '--',
-      forecast: (result.weather_data || []).slice(0, 7).map((item, index) => ({
-        hour: `${8 + index}:00`,
-        temp: Number(item.temperature?.match(/-?\d+/)?.[0] ?? 0),
-        humidity: 50 + (index % 2) * 10
-      }))
-    },
-    air: {
-      pm25,
-      pm10,
-      aqi,
-      level: aqiInfo.level,
-      advice: airAdvice(aqi)
-    }
-  };
+  if (aqi <= 50) return '空气质量优，适宜外出活动';
+  if (aqi <= 100) return '空气质量良，适宜正常出行';
+  if (aqi <= 150) return '轻度污染，敏感人群应减少户外活动';
+  if (aqi <= 200) return '中度污染，建议佩戴口罩并减少外出';
+  if (aqi <= 300) return '重度污染，尽量待在室内，关闭门窗';
+  return '严重污染，建议尽量避免外出';
 }
 
 //百度地图逆地理编码
@@ -225,22 +159,23 @@ async function fetchQWeatherData(city) {
     }
 
     function parseAirData(airData) {
+      // 如果没有拿到空气质量数据，就返回一组默认数据
       if (!airData) {
         return {
-          pm25: 0,
-          pm10: 0,
-          aqi: 50,
-          category: '优'
+          pm25: null,
+          pm10: null,
+          aqi: null,
+          category: '暂无数据'
         };
       }
 
       // 兼容旧版 /v7/air/now
       if (airData.now) {
         return {
-          pm25: Number(airData.now.pm2p5 || 0),
-          pm10: Number(airData.now.pm10 || 0),
-          aqi: Number(airData.now.aqi || 50),
-          category: airData.now.category || ''
+          pm25: airData.now.pm2p5 ? Number(airData.now.pm2p5) : null,
+          pm10: airData.now.pm10 ? Number(airData.now.pm10) : null,
+          aqi: airData.now.aqi ? Number(airData.now.aqi) : null,
+          category: airData.now.category || '暂无数据'
         };
       }
 
@@ -250,7 +185,7 @@ async function fetchQWeatherData(city) {
 
       const findPollutant = (code) => {
         const item = pollutants.find((p) => p.code === code);
-        return Number(item?.concentration?.value || 0);
+        return Number(item?.concentration?.value || null);
       };
 
       const aqiIndex =
@@ -262,8 +197,8 @@ async function fetchQWeatherData(city) {
       return {
         pm25: findPollutant('pm2p5'),
         pm10: findPollutant('pm10'),
-        aqi: Number(aqiIndex?.aqi || 50),
-        category: aqiIndex?.category || ''
+        aqi: Number(aqiIndex?.aqi || null),
+        category: aqiIndex?.category || '暂无数据'
       };
     }
 
@@ -339,6 +274,24 @@ async function fetchQWeatherData(city) {
       }
     }
 
+    // 4. 查询日出日落
+    const dailyData = await qweatherGet('/v7/weather/3d', {
+      location: location.id,
+      lang: 'zh',
+      unit: 'm'
+    });
+
+    // 5. 请求实时天气
+    const hourlyData = await qweatherGet('/v7/weather/24h', {
+      location: location.id,
+      lang: 'zh',
+      unit: 'm'
+    });
+
+    if (hourlyData.code !== '200') {
+      console.warn('[QWeather] 24小时预报 API 返回错误:', hourlyData);
+    }
+
     const now = weatherData.now || {};
     const parsedAir = parseAirData(airData);
 
@@ -347,22 +300,51 @@ async function fetchQWeatherData(city) {
     const aqi = parsedAir.aqi;
     const aqiInfo = aqiLevel(aqi);
 
-    const temperature = Number(now.temp || 20);
-    const humidity = Number(now.humidity || 50);
+    const temperature = Number(now.temp || null);
+    const humidity = Number(now.humidity || null);
+    const today = dailyData.daily?.[0] || {};
+
+    const forecast = (hourlyData.hourly || [])
+      .slice(0, 24)
+      .map((item) => {
+        const fxTime = item.fxTime || '';
+        const date = new Date(fxTime);
+
+        let hour = '--:--';
+
+        if (!Number.isNaN(date.getTime())) {
+          hour = date.toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+          });
+        } else if (fxTime) {
+          hour = String(fxTime).slice(11, 16) || '--:--';
+        }
+
+        return {
+          time: fxTime,
+          hour,
+          temp: Number(item.temp),
+          humidity: Number(item.humidity),
+          condition: item.text || ''
+        };
+      })
+      .filter((item) => Number.isFinite(item.temp) && Number.isFinite(item.humidity));
 
     console.log(`[QWeather] 返回数据: ${location.name} ${temperature}℃ AQI ${aqi}`);
 
     return {
       weather: {
         city: location.name || city,
-        condition: now.text || '晴',
+        condition: now.text || '--',
         temperature,
         humidity,
         wind: `${now.windDir || ''} ${now.windScale || ''}级`.trim() || `${now.windSpeed || 0} m/s`,
         feels_like: Number(now.feelsLike || temperature),
-        sunrise: '--',
-        sunset: '--',
-        forecast: createHourlyForecast(temperature, humidity)
+        sunrise: today.sunrise || '--',
+        sunset: today.sunset || '--',
+        forecast
       },
       air: {
         pm25,
