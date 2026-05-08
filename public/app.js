@@ -1,27 +1,28 @@
-const cityDisplay = document.getElementById('city-display');
-const dateDisplay = document.getElementById('date-display');
-const refreshButton = document.getElementById('refresh-button');
-const adviceText = document.getElementById('advice-text');
-const conditionText = document.getElementById('condition-text');
-const temperatureText = document.getElementById('temperature');
-const feelsLikeText = document.getElementById('feels-like');
-const humidityText = document.getElementById('humidity');
-const windText = document.getElementById('wind');
-const sunriseText = document.getElementById('sunrise');
-const sunsetText = document.getElementById('sunset');
-const aqiValue = document.getElementById('aqi-value');
-const pm25Value = document.getElementById('pm25-value');
-const pm10Value = document.getElementById('pm10-value');
-const aqiLevel = document.getElementById('aqi-level');
-const cityFormCard = document.getElementById('city-form-card');
-const cityForm = document.getElementById('city-form');
-const cityInput = document.getElementById('city-input');
-const chartCanvas = document.getElementById('trend-chart');
+const cityDisplay = document.getElementById('city-display'); // 当前城市显示位置
+const dateDisplay = document.getElementById('date-display'); // 当前日期显示位置
+const refreshButton = document.getElementById('refresh-button'); // 刷新按钮
+const adviceText = document.getElementById('advice-text'); // 出行建议文本
+const conditionText = document.getElementById('condition-text'); // 当前天气状况
+const temperatureText = document.getElementById('temperature'); // 温度
+const feelsLikeText = document.getElementById('feels-like'); // 体感温度
+const humidityText = document.getElementById('humidity'); // 湿度
+const windText = document.getElementById('wind'); // 风况
+const sunriseText = document.getElementById('sunrise'); // 日出时间
+const sunsetText = document.getElementById('sunset'); // 日落时间
+const aqiValue = document.getElementById('aqi-value'); // AQI数值
+const pm25Value = document.getElementById('pm25-value'); // PM2.5数值
+const pm10Value = document.getElementById('pm10-value'); // PM10数值
+const aqiLevel = document.getElementById('aqi-level'); // 空气质量等级
+const cityFormCard = document.getElementById('city-form-card'); // 手动输入城市卡片
+const cityForm = document.getElementById('city-form'); // 城市名输入表单
+const cityInput = document.getElementById('city-input'); // 城市名输入框
+const chartCanvas = document.getElementById('trend-chart'); // 温度趋势图
 
-let currentCity = '';
-let latestForecast = [];
-let chartResizeTimer = null;
+let currentCity = ''; // 当前查询的城市名称
+let latestForecast = []; // 最新获取到的天气预报数据
+let chartResizeTimer = null; // 图表重绘定时器
 
+// 设置页面顶部显示的当前日期
 function setDate() {
   const now = new Date();
   dateDisplay.textContent = now.toLocaleDateString('zh-CN', {
@@ -33,12 +34,19 @@ function setDate() {
 }
 
 async function init() {
+  // 显示的当前日期
   setDate();
+
+  // 当用户点击刷新按钮时，重新获取并刷新天气数据
   refreshButton.addEventListener('click', () => refreshWeather());
+
+  // 当窗口大小改变时，需要重新绘制图表以适应新的尺寸
   window.addEventListener('resize', () => {
     clearTimeout(chartResizeTimer);
     chartResizeTimer = setTimeout(() => drawChart(latestForecast), 120);
   });
+
+  // 当用户输入城市并提交时,保存城市名称并刷新天气数据
   cityForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const city = cityInput.value.trim();
@@ -48,6 +56,7 @@ async function init() {
     await refreshWeather();
   });
 
+  // 从已保存的数据中读取城市名称
   const saved = await loadSavedCity();
   if (saved) {
     currentCity = saved;
@@ -58,6 +67,7 @@ async function init() {
   }
 }
 
+// 从服务器加载已保存的城市名称，如果没有或发生错误则返回空字符串
 async function loadSavedCity() {
   try {
     const response = await fetch('/api/location');
@@ -69,19 +79,24 @@ async function loadSavedCity() {
   }
 }
 
+// 更新页面顶部的城市名称显示
 function updateHeader(city) {
   currentCity = city;
   cityDisplay.textContent = city;
 }
 
+// 显示手动输入城市的表单
 function showCityForm() {
   cityFormCard.classList.remove('hidden');
 }
 
+// 隐藏手动输入城市的表单
 function hideCityForm() {
   cityFormCard.classList.add('hidden');
 }
 
+// 尝试使用浏览器的地理位置功能获取用户所在城市
+// 如果成功则直接显示天气，否则显示手动输入表单
 async function tryLocation() {
   if (!navigator.geolocation) {
     showCityForm();
@@ -107,28 +122,24 @@ async function tryLocation() {
   });
 }
 
+// 根据经纬度反查城市名称
+// lat: 纬度
+// lon: 经度
 async function reverseGeocode(lat, lon) {
   try {
+    // 向服务器发送请求，获取对应经纬度的城市名称
     const response = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
     if (response.ok) {
       const data = await response.json();
       if (data.city) return data.city;
     }
   } catch (error) {
-    // ignore and fallback
-  }
-
-  try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}`;
-    const response = await fetch(url);
-    if (!response.ok) return '';
-    const data = await response.json();
-    return data.address.city || data.address.town || data.address.county || data.address.state || '';
-  } catch {
+    // 如果请求过程中出错，也返回空字符串
     return '';
   }
 }
 
+// 将用户选择的城市名称保存到服务器
 async function saveCity(city) {
   try {
     const response = await fetch('/api/location', {
@@ -145,6 +156,7 @@ async function saveCity(city) {
   }
 }
 
+// 刷新天气数据，获取当前城市的天气信息并更新页面显示
 async function refreshWeather() {
   if (!currentCity) return;
   try {
@@ -161,6 +173,7 @@ async function refreshWeather() {
   }
 }
 
+// 渲染天气数据
 function renderWeather(data) {
   if (!data || !data.weather || !data.air) {
     adviceText.textContent = '暂无天气数据。';
@@ -195,6 +208,8 @@ function toNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+// 获取画布的绘图上下文和尺寸
+// 根据设备像素比调整画布分辨率以保证图表清晰
 function getCanvasMetrics(canvas) {
   const rect = canvas.getBoundingClientRect();
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
@@ -211,6 +226,8 @@ function getCanvasMetrics(canvas) {
   return { ctx, width: cssWidth, height: cssHeight };
 }
 
+// 从一组数值中计算最小值和最大值，并自动增加上下边距，同时支持上下限约束
+// 使折线图显示得更自然、更稳定
 function getSoftRange(values, { marginRatio = 0.18, minMargin = 1, clampMin = null, clampMax = null } = {}) {
   const validValues = values.filter(Number.isFinite);
   if (validValues.length === 0) {
@@ -236,6 +253,8 @@ function getSoftRange(values, { marginRatio = 0.18, minMargin = 1, clampMin = nu
   return { min, max };
 }
 
+// 通过三次贝塞尔曲线把多个数据点自然连接起来
+// 使天气趋势图看起来更柔和
 function createSmoothPath(ctx, coords) {
   if (coords.length === 0) return;
   ctx.moveTo(coords[0].x, coords[0].y);
@@ -255,7 +274,8 @@ function createSmoothPath(ctx, coords) {
   }
 }
 
-function drawSeries(ctx, coords, color, fillColor, baseY) {
+// 绘制一条带颜色、圆角和阴影效果的平滑曲线
+function drawSeries(ctx, coords, color) {
   if (coords.length === 0) return;
 
   ctx.save();
@@ -273,6 +293,7 @@ function drawSeries(ctx, coords, color, fillColor, baseY) {
   ctx.restore();
 }
 
+// 根据传入的 24 小时天气预报数据，在Canvas上绘制温度和湿度趋势图
 function drawChart(points) {
   const { ctx, width, height } = getCanvasMetrics(chartCanvas);
   ctx.clearRect(0, 0, width, height);
@@ -356,16 +377,8 @@ function drawChart(points) {
   const tempCoords = cleanPoints.map((item, index) => ({ x: xOf(index), y: yOfTemp(item.temp) }));
   const humidityCoords = cleanPoints.map((item, index) => ({ x: xOf(index), y: yOfHumidity(item.humidity) }));
 
-  const tempGradient = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
-  tempGradient.addColorStop(0, 'rgba(14, 165, 233, 0.22)');
-  tempGradient.addColorStop(1, 'rgba(14, 165, 233, 0.02)');
-
-  const humidityGradient = ctx.createLinearGradient(0, plotTop, 0, plotBottom);
-  humidityGradient.addColorStop(0, 'rgba(249, 115, 22, 0.18)');
-  humidityGradient.addColorStop(1, 'rgba(249, 115, 22, 0.02)');
-
-  drawSeries(ctx, tempCoords, '#f97316', tempGradient, plotBottom);
-  drawSeries(ctx, humidityCoords, '#0ea5e9', humidityGradient, plotBottom);
+  drawSeries(ctx, tempCoords, '#f97316');
+  drawSeries(ctx, humidityCoords, '#0ea5e9');
 
   ctx.save();
   ctx.font = '11px sans-serif';
