@@ -13,6 +13,7 @@ const DATA_PATH = path.join(__dirname, 'data.json');
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 从 data.json 中读取当前保存的城市和天气数据
 function readDb() {
   try {
     const text = fs.readFileSync(DATA_PATH, 'utf8');
@@ -22,10 +23,15 @@ function readDb() {
   }
 }
 
+// 将数据写入 data.json
 function writeDb(data) {
-  fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2), 'utf8');
+  fs.writeFileSync(
+    DATA_PATH, 
+    JSON.stringify(data, null, 2), 
+    'utf8');
 }
 
+// 根据 AQI 数值返回对应的空气质量等级和颜色
 function aqiLevel(aqi) {
   if (aqi <= 50) return { level: '优', color: '#50e36b' };
   if (aqi <= 100) return { level: '良', color: '#81cf14' };
@@ -35,6 +41,7 @@ function aqiLevel(aqi) {
   return { level: '严重污染', color: '#7f0a14' };
 }
 
+// 生成模拟数据，供开发和测试使用
 function mockData(city) {
   const baseTemp = 15 + Math.floor(Math.random() * 10);
   const baseHumidity = 45 + Math.floor(Math.random() * 30);
@@ -66,6 +73,7 @@ function mockData(city) {
   };
 }
 
+// 根据 AQI 数值返回针对不同空气质量等级的健康建议
 function airAdvice(aqi) {
   if (aqi <= 50) return '空气质量优，适宜外出活动';
   if (aqi <= 100) return '空气质量良，适宜正常出行';
@@ -120,6 +128,8 @@ async function fetchQWeatherData(city) {
 
     const baseUrl = `https://${normalizedHost}`;
 
+    // 封装一个函数来发送 GET 请求到和风天气 API
+    // 自动添加 API Key 和处理错误
     async function qweatherGet(pathname, params = {}) {
       const url = new URL(`${baseUrl}${pathname}`);
 
@@ -159,6 +169,7 @@ async function fetchQWeatherData(city) {
       return json;
     }
 
+    // 解析空气质量数据
     function parseAirData(airData) {
       // 如果没有拿到空气质量数据，就返回一组默认数据
       if (!airData) {
@@ -364,6 +375,7 @@ async function fetchQWeatherData(city) {
   }
 }
 
+// 定义 POST /api/location 接口，用于更新当前城市
 app.post('/api/location', (req, res) => {
   const city = (req.body.city || '').trim();
   if (!city) {
@@ -378,11 +390,13 @@ app.post('/api/location', (req, res) => {
   return res.json({ success: true, city });
 });
 
+// 定义 GET /api/location 接口，返回当前保存的城市和上次更新时间
 app.get('/api/location', (req, res) => {
   const db = readDb();
   return res.json({ city: db.location || '', updatedAt: db.updatedAt || null });
 });
 
+// 定义 GET /api/geocode 接口，根据经纬度返回对应的城市名称
 app.get('/api/geocode', async (req, res) => {
   const lat = Number(req.query.lat);
   const lon = Number(req.query.lon);
@@ -398,6 +412,7 @@ app.get('/api/geocode', async (req, res) => {
   return res.json(result);
 });
 
+// 定义 GET /api/weather 接口，根据 city 参数返回天气和空气质量数据
 app.get('/api/weather', async (req, res) => {
   const city = (req.query.city || readDb().location || '').trim();
   if (!city) {
@@ -421,15 +436,18 @@ app.get('/api/weather', async (req, res) => {
   return res.json({ city, weather: result.weather, air: result.air });
 });
 
+// 定义 GET /api/data 接口，返回当前保存的城市、天气和空气质量数据
 app.get('/api/data', (req, res) => {
   const db = readDb();
   return res.json(db);
 });
 
+// 对于所有其他 GET 请求，返回 public/index.html，让前端路由处理页面显示
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// 启动服务器
 app.listen(PORT, () => {
   console.log(`Server started on http://localhost:${PORT}`);
 });
