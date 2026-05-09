@@ -1,55 +1,63 @@
 # 手机端雾霾天气探测系统
 
-一个适配手机端的雾霾天气探测 Web App，基于 Node.js + Express 后端和纯前端 HTML/CSS/JS 实现。
+## 简介
 
-## 功能概述
+HazeApp 是一个面向手机端的雾霾天气探测系统，用于查询和展示当前城市的天气信息与空气质量情况。
 
-- 手机端自适应页面设计，适配不同屏幕尺寸
-- 浏览器 Geolocation 定位城市
-- 定位失败时手动输入城市
-- 将当前城市保存到后端服务器
-- 查询天气详情与空气质量指数
-- 使用 mock 数据模式保证无 API Key 时依然可演示
-- 图表展示温度与湿度变化
-- 根据 AQI 给出出行建议
+系统由 Node.js + Express 后端和 HTML/CSS/JavaScript 前端组成。用户可以通过浏览器或手机 App 访问页面，系统会根据定位或手动输入的城市获取天气详情、空气质量指数、PM2.5、PM10、温湿度等信息，并在页面中展示空气质量等级和出行建议。
 
-## 目录结构
+项目同时支持普通 Web 页面访问和 Android App 打包运行。Android 端基于 Capacitor 构建，复用 `public` 目录中的前端页面。
 
-- `server.js`：后端服务入口
-- `data.json`：简易数据库，保存定位城市和最新天气数据
-- `public/index.html`：前端页面
-- `public/style.css`：移动端样式
-- `public/app.js`：前端逻辑和数据渲染
-- `.env.example`：配置示例
+## 使用方法
 
-## 运行步骤
+### 1. 安装依赖
 
-1. 安装依赖：
-```bash
-npm.cmd install
-```
-2. 复制配置文件：
-```bash
-copy .env.example .env
-```
-3. 修改 `.env`：
-- `USE_MOCK=true`：使用 mock 数据模式。
-- `WEATHER_API_KEY=`：和风天气接口调用。
-- `WEATHER_API_HOST=`：和风天气需要提供API HOST。
-- `GEOCODE_API_KEY=`：百度地图反向地理编码。
+进入项目目录后执行：
 
-4. 启动服务：
-```bash
-npm.cmd start
-```
-5. 打开浏览器访问：
-```text
-http://localhost:3000
-```
+    npm install
 
-## 项目说明
+如果是在 Windows 环境中，也可以使用：
 
-- 后端提供定位保存、当前城市获取、天气与空气质量查询接口。
-- 前端通过百度地图 API 反向地理编码获取城市名。
-- 如果定位失败，用户可手动输入城市名称。
-- 系统保存当前定位城市，并用移动端友好的方式展示天气和 AQI 信息。
+    npm.cmd install
+
+### 2. 配置环境变量
+
+复制 `.env.example` 文件，并重命名为 `.env`, 并修改相关配置
+
+Windows 环境：
+
+    copy .env.example .env
+
+Linux、macOS 或 WSL 环境：
+
+    cp .env.example .env
+
+### 3. 启动项目
+
+执行：
+
+    npm start
+
+Windows 环境也可以使用：
+
+    npm.cmd start
+
+启动成功后，在浏览器中访问后端ip即可使用
+
+### 4. Android App 运行
+
+项目使用 Capacitor 构建 Android 应用。
+
+同步前端代码到 Android 项目：
+
+    npx cap sync android
+
+打开 Android Studio：
+
+    npx cap open android
+
+然后可以在 Android Studio 中运行项目，或者构建 APK。
+
+如果 Android App 需要访问电脑上的后端，不能使用 `localhost`，需要在前端配置实际的后端地址。例如在 `public/config.js` 中设置：
+
+    window.HAZE_API_BASE_URL = '后端部署的ip地址';
