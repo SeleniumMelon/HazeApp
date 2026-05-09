@@ -1,4 +1,14 @@
-node_modules
+node_modules/
 .env
 data.json
-.DS_Store
+start.txt
+dist/
+build/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore

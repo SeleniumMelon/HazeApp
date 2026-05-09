@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
@@ -7,8 +8,18 @@ const fetch = require('node-fetch');
 dotenv.config();
 
 const app = express();
+
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const DATA_PATH = path.join(__dirname, 'data.json');
+
+const corsOrigin = process.env.CORS_ORIGIN || '*';
+
+app.use(cors({
+  origin: corsOrigin === '*' ? '*' : corsOrigin.split(',').map(item => item.trim()),
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type']
+}));
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -447,7 +458,16 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// 健康检查接口
+app.get('/api/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'HazeApp backend is running',
+    time: new Date().toISOString()
+  });
+});
+
 // 启动服务器
-app.listen(PORT, () => {
-  console.log(`Server started on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server started on http://${HOST}:${PORT}`);
 });

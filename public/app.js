@@ -18,6 +18,20 @@ const cityForm = document.getElementById('city-form'); // 城市名输入表单
 const cityInput = document.getElementById('city-input'); // 城市名输入框
 const chartCanvas = document.getElementById('trend-chart'); // 温度趋势图
 
+const API_BASE_URL =
+  window.HAZE_API_BASE_URL ||
+  localStorage.getItem('HAZE_API_BASE_URL') ||
+  '';
+
+function buildApiUrl(path) {
+  if (!API_BASE_URL) return path;
+  return `${API_BASE_URL.replace(/\/+$/, '')}${path}`;
+}
+
+function apiFetch(path, options) {
+  return fetch(buildApiUrl(path), options);
+}
+
 let currentCity = ''; // 当前查询的城市名称
 let latestForecast = []; // 最新获取到的天气预报数据
 let chartResizeTimer = null; // 图表重绘定时器
@@ -70,7 +84,7 @@ async function init() {
 // 从服务器加载已保存的城市名称，如果没有或发生错误则返回空字符串
 async function loadSavedCity() {
   try {
-    const response = await fetch('/api/location');
+    const response = await apiFetch('/api/location');
     if (!response.ok) return '';
     const result = await response.json();
     return result.city || '';
@@ -128,7 +142,7 @@ async function tryLocation() {
 async function reverseGeocode(lat, lon) {
   try {
     // 向服务器发送请求，获取对应经纬度的城市名称
-    const response = await fetch(`/api/geocode?lat=${lat}&lon=${lon}`);
+    const response = await apiFetch(`/api/geocode?lat=${lat}&lon=${lon}`);
     if (response.ok) {
       const data = await response.json();
       if (data.city) return data.city;
@@ -142,7 +156,7 @@ async function reverseGeocode(lat, lon) {
 // 将用户选择的城市名称保存到服务器
 async function saveCity(city) {
   try {
-    const response = await fetch('/api/location', {
+    const response = await apiFetch('/api/location', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ city })
@@ -160,7 +174,7 @@ async function saveCity(city) {
 async function refreshWeather() {
   if (!currentCity) return;
   try {
-    const response = await fetch(`/api/weather?city=${encodeURIComponent(currentCity)}`);
+    const response = await apiFetch(`/api/weather?city=${encodeURIComponent(currentCity)}`);
     if (!response.ok) {
       adviceText.textContent = '天气数据加载失败，请稍后重试。';
       return;
