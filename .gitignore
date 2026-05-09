@@ -12,3 +12,4 @@ android/local.properties
 *.aab
 *.jks
 *.keystore
+public/config.js
